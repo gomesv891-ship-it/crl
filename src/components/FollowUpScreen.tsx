@@ -940,16 +940,20 @@ export const FollowUpScreen: React.FC<FollowUpScreenProps> = ({
     setItems(newItems);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newItems));
+      setMemoryCollection(STORAGE_KEY, newItems);
       if (singleItemToSave) {
         const res = await saveItemToSupabase(STORAGE_KEY, singleItemToSave, 'id', currentUserName);
         if (res.success && res.list) {
           setItems(res.list);
+          setMemoryCollection(STORAGE_KEY, res.list);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(res.list));
         }
 
         // Sincroniza bidirecionalmente no histórico de orçamentos se possuir orcamentoId
         if (singleItemToSave.orcamentoId) {
           const orcId = singleItemToSave.orcamentoId;
           const isSold = isSoldStatus(singleItemToSave.status);
+          const isLost = isLostStatus(singleItemToSave.status);
           const rawOrcs = localStorage.getItem(ORCAMENTOS_HISTORY_KEY);
           if (rawOrcs) {
             try {
@@ -959,7 +963,7 @@ export const FollowUpScreen: React.FC<FollowUpScreenProps> = ({
                   o.id === orcId || o.id === orcId.replace('orc_', '')
                     ? {
                         ...o,
-                        status: isSold ? 'Vendido' : singleItemToSave.status,
+                        status: isSold ? 'Fechado' : isLost ? 'Perdido' : o.status || 'Em aberto',
                         updatedAt: new Date().toISOString(),
                       }
                     : o
@@ -1494,7 +1498,7 @@ export const FollowUpScreen: React.FC<FollowUpScreenProps> = ({
   };
 
   // Save Status Change
-  const handleSaveStatusChange = () => {
+  const handleSaveStatusChange = async () => {
     if (!transitioningBudget) return;
 
     const cleanPedido = numeroPedidoInput.trim().replace(/^#+/, '');
@@ -1566,11 +1570,11 @@ export const FollowUpScreen: React.FC<FollowUpScreenProps> = ({
     const updatedItems = items.map((it) =>
       it.id === transitioningBudget.id ? updatedBudget : it
     );
-    persistItems(updatedItems, updatedBudget);
+    await persistItems(updatedItems, updatedBudget);
 
     // 1. FOLLOW-UP + META + VENDAS DO DIRETOR ÉDER:
     // Sincronização automática bidirecional com remoção ao desmarcar de Vendido e prevenção de duplicatas
-    syncFollowUpStatusWithMetasAndVendas(
+    await syncFollowUpStatusWithMetasAndVendas(
       updatedBudget,
       selectedNewStatus,
       currentUserName,

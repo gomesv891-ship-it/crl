@@ -322,25 +322,26 @@ export const isSaleInTargetMonth = (
   if (!dateStr) return true; // Vendas cadastradas no fluxo ativo pertencem ao mês corrente
   const str = String(dateStr).trim();
   if (str.includes('-')) {
-    const parts = str.split('T')[0].split('-');
+    const parts = str.split('T')[0].split(' ')[0].split('-');
     if (parts.length >= 2) {
       if (parts[0].length === 4) {
         const y = parseInt(parts[0], 10);
         const m = parseInt(parts[1], 10) - 1;
         if (!isNaN(y) && !isNaN(m)) return y === targetYear && m === targetMonth;
-      } else if (parts.length >= 3 && parts[2].length === 4) {
+      } else if (parts.length >= 3 && parts[2].length >= 4) {
         const m = parseInt(parts[1], 10) - 1;
-        const y = parseInt(parts[2], 10);
+        const y = parseInt(parts[2].slice(0, 4), 10);
         if (!isNaN(y) && !isNaN(m)) return y === targetYear && m === targetMonth;
       }
     }
   }
   if (str.includes('/')) {
-    const parts = str.split('/');
+    const cleanStr = str.split(' ')[0]; // Remove ' às 09:22' ou hora
+    const parts = cleanStr.split('/');
     if (parts.length === 3) {
-      if (parts[2].length === 4) {
+      if (parts[2].length >= 4) {
         const m = parseInt(parts[1], 10) - 1;
-        const y = parseInt(parts[2], 10);
+        const y = parseInt(parts[2].slice(0, 4), 10);
         if (!isNaN(y) && !isNaN(m)) return y === targetYear && m === targetMonth;
       } else if (parts[0].length === 4) {
         const y = parseInt(parts[0], 10);
@@ -349,6 +350,13 @@ export const isSaleInTargetMonth = (
       }
     }
   }
+
+  const parsedTs = Date.parse(str);
+  if (!isNaN(parsedTs)) {
+    const d = new Date(parsedTs);
+    return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
+  }
+
   return true;
 };
 
@@ -644,7 +652,7 @@ export function loadConsolidatedMetasSales(currentUserName?: string): VendaItem[
             cliente: fup.cliente || fup.clientName || 'Cliente',
             whatsapp: fup.telefone || fup.whatsapp || '',
             data: fup.dataAtualizacao
-              ? String(fup.dataAtualizacao).split('T')[0]
+              ? String(fup.dataAtualizacao).split('T')[0].split(' ')[0]
               : fup.dataCadastro || new Date().toISOString().split('T')[0],
             responsavel: seller,
             vendedor: seller,
@@ -1053,7 +1061,7 @@ export const MetasScreen: React.FC<MetasScreenProps> = ({
               tipoCliente: (CLIENT_TYPES_LIST.includes(f.clientType || f.tipoCliente) ? (f.clientType || f.tipoCliente) : 'Cliente Final') as ClientType,
               cliente: f.cliente || f.clientName || 'Cliente',
               whatsapp: f.telefone || f.whatsapp || '',
-              data: f.dataAtualizacao ? String(f.dataAtualizacao).split('T')[0] : (f.dataCadastro || f.dataCriacao || new Date().toISOString().split('T')[0]),
+              data: f.dataAtualizacao ? String(f.dataAtualizacao).split('T')[0].split(' ')[0] : (f.dataCadastro || f.dataCriacao || new Date().toISOString().split('T')[0]),
               responsavel: seller,
               vendedor: seller,
               criadoPor: f.criadoPor || seller,

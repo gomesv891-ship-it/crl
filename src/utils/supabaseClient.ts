@@ -1169,7 +1169,7 @@ export async function fetchCollectionFromSupabase<T = any>(
           try {
             localStorage.setItem(collectionKey, JSON.stringify(rData));
           } catch {}
-          dispatchCollectionEvents(collectionKey);
+          // Leitura pura: não dispara evento de mutação para evitar loops de recarregamento
           return rData as T[];
         }
       }
@@ -1639,6 +1639,26 @@ export async function saveItemToSupabase<T extends Record<string, any>>(
         throw upsertErr;
       }
 
+      // Sincronização espelhada obrigatória para chaves de orçamentos
+      if (collectionKey === 'fenix_saved_orcamentos' || collectionKey === 'fenix_orcamentos_history') {
+        const siblingKey = collectionKey === 'fenix_saved_orcamentos' ? 'fenix_orcamentos_history' : 'fenix_saved_orcamentos';
+        void Promise.resolve(
+          client
+            .from('fenix_kv_store')
+            .upsert(
+              {
+                key: siblingKey,
+                data: updatedList,
+                updated_at: nowIso,
+                updated_by: user,
+              },
+              { onConflict: 'key' }
+            )
+        ).catch(() => {});
+        setMemoryCollection(siblingKey, updatedList);
+        try { localStorage.setItem(siblingKey, JSON.stringify(updatedList)); } catch {}
+      }
+
       // 4. CONFIRMAR O SALVAMENTO E RECARREGAR O REGISTRO SALVO DIRETAMENTE DO SUPABASE
       let confirmedList: T[] = updatedList;
       try {
@@ -1787,6 +1807,25 @@ export async function deleteItemFromSupabase(
 
     if (upsertErr) {
       throw upsertErr;
+    }
+
+    if (collectionKey === 'fenix_saved_orcamentos' || collectionKey === 'fenix_orcamentos_history') {
+      const siblingKey = collectionKey === 'fenix_saved_orcamentos' ? 'fenix_orcamentos_history' : 'fenix_saved_orcamentos';
+      void Promise.resolve(
+        client
+          .from('fenix_kv_store')
+          .upsert(
+            {
+              key: siblingKey,
+              data: updatedList,
+              updated_at: nowIso,
+              updated_by: user,
+            },
+            { onConflict: 'key' }
+          )
+      ).catch(() => {});
+      setMemoryCollection(siblingKey, updatedList);
+      try { localStorage.setItem(siblingKey, JSON.stringify(updatedList)); } catch {}
     }
 
     // 3. CONFIRMAÇÃO DO SALVAMENTO: Recarrega estado confirmado diretamente do Supabase

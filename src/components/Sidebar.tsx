@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  LayoutDashboard,
   Users,
   Calculator,
   FileText,
@@ -76,19 +75,11 @@ const DIRECTOR_MENU_SECTIONS: MenuSection[] = [
 ];
 
 // Menu oficial e exclusivo para as Consultoras Comerciais (Vanessa Gomes e Jhessica Camargo)
-// Estrutura obrigatória:
-// DASHBOARD (Dashboard)
 // COMERCIAL (Clientes, Calculadora, Orçamentos, Follow-up, Metas)
 // OPERAÇÃO (Estoque, Produtos, Tarefas, Pós Vendas)
 // FINANCEIRO & CONTROLE (Boletos, Pendências, Notas, Configurações)
 // * Vendas é estritamente removida do menu das consultoras
 const CONSULTORA_MENU_SECTIONS: MenuSection[] = [
-  {
-    title: 'DASHBOARD',
-    items: [
-      { id: 'Dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    ],
-  },
   {
     title: 'COMERCIAL',
     items: [
@@ -139,11 +130,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       // Regra obrigatória: 'Vendas' é 100% exclusivo do Diretor Éder Perez
       if (item.id === 'Vendas') {
         return isDirector;
-      }
-
-      // Regra obrigatória: 'Dashboard' é sempre visível para as consultoras (Vanessa e Jhessica)
-      if (item.id === 'Dashboard') {
-        return !isDirector;
       }
 
       // Diretor Éder Perez tem acesso irrestrito a todas as opções permitidas da base

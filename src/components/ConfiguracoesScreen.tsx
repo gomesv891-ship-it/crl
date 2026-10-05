@@ -151,7 +151,6 @@ export interface FenixUser {
 }
 
 const ALL_MODULES = [
-  'Dashboard',
   'Clientes',
   'Calculadora',
   'Orçamentos',
@@ -178,7 +177,7 @@ const INITIAL_USERS: FenixUser[] = [
     cargo: 'Consultora Comercial',
     acesso: 'CRM Completo',
     status: 'Ativo',
-    modulos: ['Dashboard', 'Clientes', 'Calculadora', 'Orçamentos', 'Follow-up', 'Metas', 'Estoque', 'Produtos', 'Tarefas', 'Pós Vendas', 'Boletos', 'Pendências', 'Notas', 'Configurações'],
+    modulos: ['Clientes', 'Calculadora', 'Orçamentos', 'Follow-up', 'Metas', 'Estoque', 'Produtos', 'Tarefas', 'Pós Vendas', 'Boletos', 'Pendências', 'Notas', 'Configurações'],
     loginSugerido: 'vanessa.gomes',
     avatarIniciais: 'VG',
     avatarBg: 'bg-[#1D4ED8]',
@@ -190,7 +189,7 @@ const INITIAL_USERS: FenixUser[] = [
     cargo: 'Consultora Comercial',
     acesso: 'CRM Completo',
     status: 'Ativo',
-    modulos: ['Dashboard', 'Clientes', 'Calculadora', 'Orçamentos', 'Follow-up', 'Metas', 'Estoque', 'Produtos', 'Tarefas', 'Pós Vendas', 'Boletos', 'Pendências', 'Notas', 'Configurações'],
+    modulos: ['Clientes', 'Calculadora', 'Orçamentos', 'Follow-up', 'Metas', 'Estoque', 'Produtos', 'Tarefas', 'Pós Vendas', 'Boletos', 'Pendências', 'Notas', 'Configurações'],
     loginSugerido: 'jhessica.camargo',
     avatarIniciais: 'JC',
     avatarBg: 'bg-[#0B2046]',

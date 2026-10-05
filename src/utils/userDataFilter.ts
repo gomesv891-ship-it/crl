@@ -280,15 +280,15 @@ export function isOrcamentoAccessibleByUser(orc: SavedOrcamento, activeUserName:
   const userLower = activeUserName.trim().toLowerCase();
 
   // 1. O CRIADOR SEMPRE CONTINUA VENDO O ORÇAMENTO QUE CADASTROU
-  if (registeredBy && (registeredBy === userLower || registeredBy.includes(userLower) || userLower.includes(registeredBy))) {
+  if (registeredBy && (areUsersEqualOrRelated(registeredBy, activeUserName) || registeredBy === userLower || registeredBy.includes(userLower) || userLower.includes(registeredBy))) {
     return true;
   }
 
   // 2. O RESPONSÁVEL ATRIBUÍDO TAMBÉM VÊ NO SISTEMA DELE
-  if (consultora && (consultora === userLower || consultora.includes(userLower) || userLower.includes(consultora))) {
+  if (consultora && (areUsersEqualOrRelated(consultora, activeUserName) || consultora === userLower || consultora.includes(userLower) || userLower.includes(consultora))) {
     return true;
   }
-  if (responsavel && (responsavel === userLower || responsavel.includes(userLower) || userLower.includes(responsavel))) {
+  if (responsavel && (areUsersEqualOrRelated(responsavel, activeUserName) || responsavel === userLower || responsavel.includes(userLower) || userLower.includes(responsavel))) {
     return true;
   }
   if (targetSellerId && (orcSellerId === targetSellerId || orcResponsavelId === targetSellerId)) {

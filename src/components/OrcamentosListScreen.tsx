@@ -898,7 +898,11 @@ export const OrcamentosListScreen: React.FC<OrcamentosListScreenProps> = ({
     // Resposta visual e atualização de dados imediata
     setOrcamentos(updated);
     setMemoryCollection('fenix_orcamentos_history', updated);
-    localStorage.setItem('fenix_orcamentos_history', JSON.stringify(updated));
+    setMemoryCollection('fenix_saved_orcamentos', updated);
+    try {
+      localStorage.setItem('fenix_orcamentos_history', JSON.stringify(updated));
+      localStorage.setItem('fenix_saved_orcamentos', JSON.stringify(updated));
+    } catch {}
 
     // Card correspondente de Follow-up para o novo orçamento
     const sellerId = getSellerIdForUser(currentUserName);
@@ -1092,29 +1096,33 @@ export const OrcamentosListScreen: React.FC<OrcamentosListScreenProps> = ({
         const followUpList = JSON.parse(followUpRaw);
         if (Array.isArray(followUpList)) {
           const isVendidoStatus = newStatus === 'Fechado' || newStatus === 'Fechados' || (newStatus as any) === 'Vendido';
-          const targetStatus = isVendidoStatus ? 'Vendido' : newStatus === 'Perdido' || newStatus === 'Perdidos' ? 'Perdido' : 'Orçamento Enviado';
+          const isPerdidoStatus = newStatus === 'Perdido' || newStatus === 'Perdidos';
           
           let fupChanged = false;
           const updatedFollowUp = followUpList.map((f: any) => {
             if (f.orcamentoId === id || f.id === `fup_${id}` || f.id === id) {
-              fupChanged = true;
-              return {
-                ...f,
-                status: targetStatus,
-                dataAtualizacao: new Date().toISOString(),
-                ...(isVendidoStatus ? { lembretesAtivos: false } : {}),
-              };
+              const targetStatus = isVendidoStatus ? 'Vendido' : isPerdidoStatus ? 'Perdido' : f.status;
+              if (targetStatus !== f.status) {
+                fupChanged = true;
+                return {
+                  ...f,
+                  status: targetStatus,
+                  dataAtualizacao: new Date().toISOString(),
+                  ...(isVendidoStatus ? { lembretesAtivos: false } : {}),
+                };
+              }
             }
             return f;
           });
 
           if (fupChanged) {
             localStorage.setItem('fenix_followup_cards_v2', JSON.stringify(updatedFollowUp));
+            setMemoryCollection('fenix_followup_cards_v2', updatedFollowUp);
             const updatedFupItem = updatedFollowUp.find((f: any) => f.orcamentoId === id || f.id === `fup_${id}` || f.id === id);
             if (updatedFupItem) {
               saveItemToSupabase('fenix_followup_cards_v2', updatedFupItem, 'id', currentUserName).catch(() => {});
-              // REGRA: Se vendido em outubro, entra na Meta/Vendas de outubro, mantendo o orçamento e follow-up no mês de criação
-              syncFollowUpStatusWithMetasAndVendas(updatedFupItem, targetStatus, currentUserName);
+              // Sincroniza com Meta e Vendas se for alteração para Vendido ou reversão
+              void syncFollowUpStatusWithMetasAndVendas(updatedFupItem, updatedFupItem.status, currentUserName);
             }
             window.dispatchEvent(new Event('fenix_followup_updated'));
           }
@@ -1289,11 +1297,7 @@ export const OrcamentosListScreen: React.FC<OrcamentosListScreenProps> = ({
                   setSelectedMonth(selectedDay.month - 1);
                   setSelectedYear(selectedDay.year);
                 }
-                pullCollectionFromSupabase('fenix_orcamentos_history', 3000)
-                  .then((ok) => {
-                    if (ok) loadOrcamentos();
-                  })
-                  .catch(() => {});
+                loadOrcamentos();
               }}
               className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                 periodMode === 'mes' && filterByDate
@@ -1320,11 +1324,7 @@ export const OrcamentosListScreen: React.FC<OrcamentosListScreenProps> = ({
                     day: 1,
                   });
                 }
-                pullCollectionFromSupabase('fenix_orcamentos_history', 3000)
-                  .then((ok) => {
-                    if (ok) loadOrcamentos();
-                  })
-                  .catch(() => {});
+                loadOrcamentos();
               }}
               className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                 periodMode === 'dia' && filterByDate

@@ -23,7 +23,7 @@ export function extractCleanPedido(raw?: string | number): string {
  * - Se mudar de VENDIDO para qualquer outro status: remove automaticamente da META e das Vendas do Diretor.
  * - Impede duplicações usando o ID único do Follow-up / Orçamento / Pedido.
  */
-export function syncFollowUpStatusWithMetasAndVendas(
+export async function syncFollowUpStatusWithMetasAndVendas(
   budget: FollowUpItem,
   newStatus: FollowUpStatus,
   currentUserName: string,
@@ -33,11 +33,12 @@ export function syncFollowUpStatusWithMetasAndVendas(
     formaPagamento?: string;
     parcelas?: string;
   }
-): void {
-  if (typeof window === 'undefined' || !budget || !budget.id) return;
+): Promise<boolean> {
+  if (typeof window === 'undefined' || !budget || !budget.id) return false;
 
   const cleanPedido = extractCleanPedido(extraData?.pedido || budget.pedido);
-  const saleId = `v_orc_${budget.id}`;
+  const targetOrcId = budget.orcamentoId ? String(budget.orcamentoId).trim() : String(budget.id).replace(/^fup_/, '').trim();
+  const saleId = targetOrcId ? `v_orc_${targetOrcId}` : `v_orc_${budget.id}`;
   const now = new Date();
   let dateStr = '';
   try {
@@ -76,7 +77,7 @@ export function syncFollowUpStatusWithMetasAndVendas(
       if (rawOrcs) {
         const list = JSON.parse(rawOrcs);
         if (Array.isArray(list)) {
-          const match = list.find((o: any) => o && (o.id === budget.orcamentoId || o.id === budget.id || o.id === budget.id.replace('fup_', '')));
+          const match = list.find((o: any) => o && (o.id === budget.orcamentoId || o.id === budget.id || o.id === targetOrcId));
           if (match) {
             if (!freteVal && match.freteAtivo && match.freteValor) {
               freteVal = Number(match.freteValor) || 0;
@@ -111,12 +112,11 @@ export function syncFollowUpStatusWithMetasAndVendas(
       let metasSales: any[] = rawMetas ? JSON.parse(rawMetas) : [];
       if (!Array.isArray(metasSales)) metasSales = [];
 
-      const orcId = budget.orcamentoId ? String(budget.orcamentoId) : undefined;
       const clientNameNorm = clientName.toLowerCase().trim();
 
       const metaSaleRecord = {
         id: saleId,
-        orcamentoId: budget.id,
+        orcamentoId: targetOrcId || budget.id,
         followUpId: budget.id,
         pedido: cleanPedido,
         valor: saleValue,
@@ -139,15 +139,15 @@ export function syncFollowUpStatusWithMetasAndVendas(
         criadoPor: budget.criadoPor || responsibleUser,
         registeredBy: currentUserName || responsibleUser,
         origem: 'followup',
+        updatedAt: now.toISOString(),
       };
 
-      // REGRA: Evitar duplicação caso o Follow-up seja editado novamente
+      // REGRA: Identificação única estrita ligando Follow-up -> Orçamento -> Cliente -> Responsável -> Meta
       const existingIndex = metasSales.findIndex((s: any) => {
         if (!s) return false;
         if (s.id === saleId) return true;
         if (s.followUpId && String(s.followUpId) === String(budget.id)) return true;
-        if (s.orcamentoId && String(s.orcamentoId) === String(budget.id)) return true;
-        if (orcId && (s.orcamentoId === orcId || s.followUpId === orcId || s.id === `v_orc_${orcId}`)) return true;
+        if (s.orcamentoId && targetOrcId && (String(s.orcamentoId) === targetOrcId || String(s.orcamentoId) === String(budget.id))) return true;
         const sPed = extractCleanPedido(s.pedido);
         const sCli = (s.cliente || '').trim().toLowerCase();
         if (cleanPedido && sPed && cleanPedido === sPed && (!clientNameNorm || !sCli || clientNameNorm === sCli)) {
@@ -172,9 +172,9 @@ export function syncFollowUpStatusWithMetasAndVendas(
       }
 
       localStorage.setItem(METAS_SALES_STORAGE_KEY, JSON.stringify(updatedMetas));
-      // Salva de forma atômica no Supabase sem sobrescrever outras vendas
-      saveItemToSupabase(METAS_SALES_STORAGE_KEY, metaSaleRecord, 'id', currentUserName).catch(() => {});
-      syncSingleMetaSaleToVendas(metaSaleRecord, currentUserName).catch(() => {});
+      // Salva de forma persistente e confirmada no Supabase (Fonte Oficial)
+      await saveItemToSupabase(METAS_SALES_STORAGE_KEY, metaSaleRecord, 'id', currentUserName);
+      await syncSingleMetaSaleToVendas(metaSaleRecord, currentUserName);
       window.dispatchEvent(new Event('fenix_metas_updated'));
     } catch (err) {
       console.error('Erro ao sincronizar venda na Meta:', err);
@@ -210,7 +210,7 @@ export function syncFollowUpStatusWithMetasAndVendas(
         itensResumo: budget.produto || budget.nomeOrcamento || 'Piso Vinílico e Acessórios Fênix',
         metaId: saleId,
         followUpId: budget.id,
-        orcamentoId: budget.id,
+        orcamentoId: targetOrcId || budget.id,
         createdAt: now.toISOString(),
         criadoPor: currentUserName,
       };
@@ -218,7 +218,7 @@ export function syncFollowUpStatusWithMetasAndVendas(
       const existingIndex = findMatchingVendaIndex(gerencialSales, {
         id: `vnd-fup-${budget.id}`,
         followUpId: budget.id,
-        orcamentoId: budget.id,
+        orcamentoId: targetOrcId || budget.id,
         pedido: cleanPedido,
         numeroPedido: cleanPedido,
         cliente: clientName,
@@ -239,7 +239,7 @@ export function syncFollowUpStatusWithMetasAndVendas(
           id: gerencialSales[existingIndex].id || vendaGerencialRecord.id,
           metaId: gerencialSales[existingIndex].metaId || saleId,
           followUpId: budget.id,
-          orcamentoId: gerencialSales[existingIndex].orcamentoId || budget.id,
+          orcamentoId: gerencialSales[existingIndex].orcamentoId || targetOrcId || budget.id,
         };
       } else {
         updatedVendas = [vendaGerencialRecord, ...gerencialSales];
@@ -247,15 +247,45 @@ export function syncFollowUpStatusWithMetasAndVendas(
       updatedVendas = deduplicateVendasList(updatedVendas);
 
       localStorage.setItem(VENDAS_GERENCIAL_STORAGE_KEY, JSON.stringify(updatedVendas));
-      saveWholeCollectionToSupabase(VENDAS_GERENCIAL_STORAGE_KEY, updatedVendas, currentUserName).catch(() => {});
+      await saveWholeCollectionToSupabase(VENDAS_GERENCIAL_STORAGE_KEY, updatedVendas, currentUserName);
       window.dispatchEvent(new Event('fenix_vendas_gerencial_updated'));
       window.dispatchEvent(new Event('fenix_vendas_updated'));
     } catch (err) {
       console.error('Erro ao sincronizar Vendas do Diretor:', err);
     }
   } else {
-    // REGRA: Nunca apagar, substituir ou zerar vendas já existentes em Metas.
-    // Todas as vendas anteriores são preservadas integralmente.
+    // ---------------------------------------------------------------------------------
+    // CASO 2: STATUS MUDOU DE "Vendido" PARA OUTRO STATUS -> TRATAR REVERSÃO NA META
+    // Regra do Usuário: "Se mudar de 'Vendido' para outro status, tratar a reversão conforme
+    // a lógica já existente do sistema, sem apagar vendas não relacionadas."
+    // ---------------------------------------------------------------------------------
+    try {
+      const rawMetas = localStorage.getItem(METAS_SALES_STORAGE_KEY);
+      if (rawMetas) {
+        const metasSales: any[] = JSON.parse(rawMetas);
+        if (Array.isArray(metasSales)) {
+          const removedSale = metasSales.find((s: any) => {
+            if (!s) return false;
+            if (s.id === saleId) return true;
+            if (s.followUpId && String(s.followUpId) === String(budget.id)) return true;
+            if (s.orcamentoId && targetOrcId && (String(s.orcamentoId) === targetOrcId || String(s.orcamentoId) === String(budget.id))) return true;
+            if (cleanPedido && s.pedido && extractCleanPedido(s.pedido) === cleanPedido && s.cliente?.trim().toLowerCase() === clientName.toLowerCase()) return true;
+            return false;
+          });
+
+          if (removedSale) {
+            const filteredMetas = metasSales.filter((s: any) => s && s.id !== removedSale.id && s.followUpId !== budget.id);
+            localStorage.setItem(METAS_SALES_STORAGE_KEY, JSON.stringify(filteredMetas));
+            if (removedSale.id) {
+              await deleteItemFromSupabase(METAS_SALES_STORAGE_KEY, removedSale.id, 'id', currentUserName);
+            }
+            window.dispatchEvent(new Event('fenix_metas_updated'));
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao reverter venda na Meta:', err);
+    }
 
     // 2.2 Remover das VENDAS DO DIRETOR ÉDER se mudou de Vendido para outro status
     try {
@@ -266,6 +296,7 @@ export function syncFollowUpStatusWithMetasAndVendas(
           const removedVenda = gerencialSales.find(
             (v) =>
               v.orcamentoId === budget.id ||
+              v.orcamentoId === targetOrcId ||
               (v as any).followUpId === budget.id ||
               v.metaId === saleId ||
               v.id === `vnd-fup-${budget.id}` ||
@@ -274,6 +305,7 @@ export function syncFollowUpStatusWithMetasAndVendas(
           const filtered = gerencialSales.filter(
             (v) =>
               v.orcamentoId !== budget.id &&
+              v.orcamentoId !== targetOrcId &&
               (v as any).followUpId !== budget.id &&
               v.metaId !== saleId &&
               v.id !== `vnd-fup-${budget.id}` &&
@@ -282,7 +314,7 @@ export function syncFollowUpStatusWithMetasAndVendas(
           if (filtered.length !== gerencialSales.length) {
             localStorage.setItem(VENDAS_GERENCIAL_STORAGE_KEY, JSON.stringify(filtered));
             if (removedVenda?.id) {
-              deleteItemFromSupabase(VENDAS_GERENCIAL_STORAGE_KEY, removedVenda.id, 'id', currentUserName).catch(() => {});
+              await deleteItemFromSupabase(VENDAS_GERENCIAL_STORAGE_KEY, removedVenda.id, 'id', currentUserName);
             }
             window.dispatchEvent(new Event('fenix_vendas_updated'));
           }
@@ -299,6 +331,8 @@ export function syncFollowUpStatusWithMetasAndVendas(
       localStorage.removeItem(`fenix_fup_alerted_2dias_${budget.id}`);
     } catch {}
   }
+
+  return true;
 }
 
 /**

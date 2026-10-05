@@ -19,7 +19,6 @@ import { PendenciasScreen } from './components/PendenciasScreen';
 import { ConfiguracoesScreen } from './components/ConfiguracoesScreen';
 import { ControleEstoqueScreen } from './components/ControleEstoqueScreen';
 import { VendasScreen } from './components/VendasScreen';
-import { ConsultoraDashboardScreen } from './components/ConsultoraDashboardScreen';
 import { NotificacoesScreen } from './components/NotificacoesScreen';
 import { ClientRecord, SavedOrcamento } from './types';
 import { getStoredAccounts, isEderPerez, fetchUsersFromSupabase, fetchAccountsFromSupabase } from './utils/auth';
@@ -107,10 +106,10 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [currentTab, setCurrentTab] = useState(() => {
     const saved = localStorage.getItem('fenix_last_active_tab');
-    if (saved === 'Documentos') return 'Clientes';
+    if (saved === 'Documentos' || saved === 'Dashboard') return 'Clientes';
     if (saved === 'Vendas') {
       const activeUser = localStorage.getItem('fenix_active_user_name') || '';
-      if (!isEderPerez(activeUser)) return 'Dashboard';
+      if (!isEderPerez(activeUser)) return 'Clientes';
     }
     return saved || 'Clientes';
   });
@@ -314,20 +313,16 @@ export default function App() {
         if (isDirector) {
           setCurrentTab('Vendas');
         } else {
-          // Bloqueia e redireciona imediatamente para o Dashboard das consultoras
-          window.location.hash = 'dashboard';
-          setCurrentTab('Dashboard');
+          // Bloqueia e redireciona imediatamente para clientes
+          window.location.hash = 'clientes';
+          setCurrentTab('Clientes');
         }
         return;
       }
 
       if (hash === 'dashboard') {
-        if (isDirector) {
-          window.location.hash = 'vendas';
-          setCurrentTab('Vendas');
-        } else {
-          setCurrentTab('Dashboard');
-        }
+        window.location.hash = 'clientes';
+        setCurrentTab('Clientes');
         return;
       }
 
@@ -337,7 +332,6 @@ export default function App() {
       }
 
       const map: Record<string, string> = {
-        dashboard: 'Dashboard',
         clientes: 'Clientes',
         calculadora: 'Calculadora',
         orcamentos: 'Orçamentos',
@@ -414,14 +408,10 @@ export default function App() {
       );
 
     if (userAccount && Array.isArray(userAccount.modulos)) {
-      // Filtrar 'Controle de Estoque' e garantir que 'Vendas' seja exclusivo do Diretor Éder Perez
+      // Filtrar 'Controle de Estoque', 'Documentos' e garantir que 'Vendas' seja exclusivo do Diretor Éder Perez
       const clean = userAccount.modulos
-        .filter((m) => m !== 'Controle de Estoque' && m !== 'Documentos' && (isDirector ? true : m !== 'Vendas'))
+        .filter((m) => m !== 'Controle de Estoque' && m !== 'Documentos' && m !== 'Dashboard' && (isDirector ? true : m !== 'Vendas'))
         .map((m) => (m === 'Pós-Vendas' ? 'Pós Vendas' : m));
-      // Inserir 'Dashboard' no topo para as Consultoras
-      if (!isDirector && !clean.includes('Dashboard')) {
-        clean.unshift('Dashboard');
-      }
       // Suporte interno para abrir modal de Notificações
       if (!clean.includes('Notificações')) {
         clean.push('Notificações');
@@ -430,7 +420,6 @@ export default function App() {
     }
 
     return [
-      'Dashboard',
       'Clientes',
       'Calculadora',
       'Orçamentos',
@@ -593,26 +582,7 @@ export default function App() {
 
           {/* Main Content according to active tab */}
           <main className="flex-1 pb-10 w-full min-w-0 flex flex-col">
-            {currentTab === 'Dashboard' ? (
-              <ConsultoraDashboardScreen
-                currentUserName={currentUserName}
-                onNavigateTab={(tab, payload) => {
-                  if (tab === 'Orçamentos') {
-                    if (payload?.orcamento) {
-                      setSelectedOrcamento(payload.orcamento);
-                      setOrcamentoViewMode(payload.mode || 'edit');
-                    } else {
-                      setActiveClient(null);
-                      setOrcamentoViewMode('list');
-                      setSelectedOrcamento(null);
-                    }
-                  } else if (tab === 'Clientes' && payload?.client) {
-                    setActiveClient(payload.client);
-                  }
-                  setCurrentTab(tab as any);
-                }}
-              />
-            ) : currentTab === 'Clientes' ? (
+            {currentTab === 'Clientes' ? (
               <ClientesScreen
                 currentUserName={currentUserName}
                 initialClient={activeClient}
@@ -773,22 +743,16 @@ export default function App() {
                   onNavigateTab={(tab) => setCurrentTab(tab as any)}
                 />
               ) : (
-                <ConsultoraDashboardScreen
+                <ClientesScreen
                   currentUserName={currentUserName}
-                  onNavigateTab={(tab, payload) => {
-                    if (tab === 'Orçamentos') {
-                      if (payload?.orcamento) {
-                        setSelectedOrcamento(payload.orcamento);
-                        setOrcamentoViewMode(payload.mode || 'edit');
-                      } else {
-                        setActiveClient(null);
-                        setOrcamentoViewMode('list');
-                        setSelectedOrcamento(null);
-                      }
-                    } else if (tab === 'Clientes' && payload?.client) {
-                      setActiveClient(payload.client);
-                    }
-                    setCurrentTab(tab as any);
+                  onNavigateTab={(tab) => setCurrentTab(tab as any)}
+                  onSelectClient={(client) => {
+                    setActiveClient(client);
+                    setCurrentTab('Orçamentos');
+                  }}
+                  onOpenCalculadoraForClient={(client) => {
+                    setActiveClient(client);
+                    setCurrentTab('Calculadora');
                   }}
                 />
               )

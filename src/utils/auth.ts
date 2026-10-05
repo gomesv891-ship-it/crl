@@ -26,7 +26,6 @@ const AUTH_STATUS_KEY = 'fenix_auth_active';
 const FENIX_USUARIOS_KEY = 'fenix_usuarios_v2';
 
 const DEFAULT_MODULES = [
-  'Dashboard',
   'Clientes',
   'Calculadora',
   'Orçamentos',
@@ -83,7 +82,7 @@ const INITIAL_ACCOUNTS: Record<string, UserAccount> = {
     avatarId: 'oficial',
     active: true,
     status: 'Ativo',
-    modulos: [...DEFAULT_MODULES.filter(m => m !== 'Dashboard'), 'Vendas'],
+    modulos: [...DEFAULT_MODULES, 'Vendas'],
   },
   'Jeferson Trolesi': {
     name: 'Jeferson Trolesi',

@@ -59,7 +59,7 @@ import { ProductSelectionModal } from './ProductSelectionModal';
 import { ModalCadastrarNovoProdutoOrcamento } from './ModalCadastrarNovoProdutoOrcamento';
 import { EspelhoOrcamento, EspelhoItem } from './EspelhoOrcamento';
 import { filterClientsForUser, isClientOwnedByUser, getSellerIdForUser } from '../utils/userDataFilter';
-import { saveItemToSupabase, setMemoryCollection } from '../utils/supabaseClient';
+import { saveItemToSupabase, setMemoryCollection, getMemoryCollection, safeMergeLists } from '../utils/supabaseClient';
 import { getOrcamentoExportFileName } from '../utils/orcamentoFileName';
 import { compareOrcamentosByCreationDateDesc, formatOrcamentoCreationDate } from '../utils/orcamentoSorting';
 import {
@@ -2099,23 +2099,22 @@ export const OrcamentoScreen: React.FC<OrcamentoScreenProps> = ({
 
     // 1. Atualização persistente atômica preventiva no cache local (0ms de latência e proteção anti-perda)
     try {
-      const rawHistory = localStorage.getItem('fenix_orcamentos_history');
-      const historyList: SavedOrcamento[] = rawHistory ? JSON.parse(rawHistory) : [];
-      const hIdx = historyList.findIndex((o) => o.id === orcId);
-      if (hIdx >= 0) historyList[hIdx] = orcamentoData;
-      else historyList.unshift(orcamentoData);
-      historyList.sort(compareOrcamentosByCreationDateDesc);
-      localStorage.setItem('fenix_orcamentos_history', JSON.stringify(historyList));
-      setMemoryCollection('fenix_orcamentos_history', historyList);
+      const memHistory = getMemoryCollection<SavedOrcamento[]>('fenix_orcamentos_history') || [];
+      const memSaved = getMemoryCollection<SavedOrcamento[]>('fenix_saved_orcamentos') || [];
+      let baseList: SavedOrcamento[] = safeMergeLists(memHistory, memSaved, 'id');
+      if (baseList.length === 0) {
+        const rawHistory = localStorage.getItem('fenix_orcamentos_history');
+        const rawSaved = localStorage.getItem('fenix_saved_orcamentos');
+        const localHistory = rawHistory ? JSON.parse(rawHistory) : [];
+        const localSaved = rawSaved ? JSON.parse(rawSaved) : [];
+        baseList = safeMergeLists(localHistory, localSaved, 'id');
+      }
 
-      const rawSaved = localStorage.getItem('fenix_saved_orcamentos');
-      const savedList: SavedOrcamento[] = rawSaved ? JSON.parse(rawSaved) : [];
-      const sIdx = savedList.findIndex((o) => o.id === orcId);
-      if (sIdx >= 0) savedList[sIdx] = orcamentoData;
-      else savedList.unshift(orcamentoData);
-      savedList.sort(compareOrcamentosByCreationDateDesc);
-      localStorage.setItem('fenix_saved_orcamentos', JSON.stringify(savedList));
-      setMemoryCollection('fenix_saved_orcamentos', savedList);
+      const mergedList = safeMergeLists([orcamentoData], baseList, 'id').sort(compareOrcamentosByCreationDateDesc);
+      localStorage.setItem('fenix_orcamentos_history', JSON.stringify(mergedList));
+      setMemoryCollection('fenix_orcamentos_history', mergedList);
+      localStorage.setItem('fenix_saved_orcamentos', JSON.stringify(mergedList));
+      setMemoryCollection('fenix_saved_orcamentos', mergedList);
 
       sessionStorage.setItem('fenix_newly_saved_orcamento_id', orcId);
       if (clientName) {
@@ -2145,16 +2144,20 @@ export const OrcamentoScreen: React.FC<OrcamentoScreenProps> = ({
       timestamp: Date.now(),
     };
 
-    const followUpRaw = localStorage.getItem('fenix_followup_cards_v2');
-    let followUpList: any[] = [];
-    try {
-      followUpList = followUpRaw ? JSON.parse(followUpRaw) : [];
-    } catch {
-      followUpList = [];
+    const memFup = getMemoryCollection<any[]>('fenix_followup_cards_v2') || [];
+    let followUpList: any[] = memFup;
+    if (followUpList.length === 0) {
+      const followUpRaw = localStorage.getItem('fenix_followup_cards_v2');
+      if (followUpRaw) {
+        try {
+          const parsed = JSON.parse(followUpRaw);
+          if (Array.isArray(parsed)) followUpList = parsed;
+        } catch {}
+      }
     }
 
     const existingFupIdx = followUpList.findIndex(
-      (f: any) => f.orcamentoId === orcId || f.id === `fup_${orcId}`
+      (f: any) => f && (f.orcamentoId === orcId || f.id === `fup_${orcId}` || f.id === orcId)
     );
 
     const isSold = (s?: string) => {
@@ -2186,7 +2189,7 @@ export const OrcamentoScreen: React.FC<OrcamentoScreenProps> = ({
         valor: totalFinal,
         dataAtualizacao: `${todayFormatted} às ${timeFormatted}`,
         updatedAt: now.toISOString(),
-        status: isAlreadySoldOrLost ? followUpList[existingFupIdx].status : 'Orçamento Enviado',
+        status: followUpList[existingFupIdx].status || 'Orçamento Enviado',
         vendedor: finalSeller,
         vendedorId: sellerId || followUpList[existingFupIdx].vendedorId,
         consultoraName: finalSeller,
@@ -2230,11 +2233,9 @@ export const OrcamentoScreen: React.FC<OrcamentoScreenProps> = ({
     }
 
     try {
-      const fIdx = followUpList.findIndex((f: any) => f.orcamentoId === orcId || f.id === `fup_${orcId}`);
-      if (fIdx >= 0) followUpList[fIdx] = followUpItemToSave;
-      else followUpList.unshift(followUpItemToSave);
-      localStorage.setItem('fenix_followup_cards_v2', JSON.stringify(followUpList));
-      setMemoryCollection('fenix_followup_cards_v2', followUpList);
+      const updatedFupList = safeMergeLists([followUpItemToSave], followUpList, 'id');
+      localStorage.setItem('fenix_followup_cards_v2', JSON.stringify(updatedFupList));
+      setMemoryCollection('fenix_followup_cards_v2', updatedFupList);
       window.dispatchEvent(new Event('fenix_followup_updated'));
       window.dispatchEvent(new Event('fenix_orcamentos_updated'));
     } catch {}
